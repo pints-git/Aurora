@@ -1,49 +1,65 @@
-from fastapi import FastAPI, Request
-from transformers import pipeline
-import requests
-import os
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+import pyttsx3
+import pywhatkit
+import datetime
+import wikipedia
+import pyjokes
 
-app = FastAPI()
+# Initialize Aurora
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model_name = "t5-base"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 
-# Gen AI model
-ai_model = pipeline("text-generation", model="gpt-3")
+# Initialize Text-to-Speech
+alex = pyttsx3.init()
+voices = alex.getProperty('voices')
+alex.setProperty('voice', voices[1].id)
 
-# OpenWeatherMap API
-weather_api = "http://api.openweathermap.org/data/2.5/weather"
+def speak(answer):
+    print('Aurora : ', answer)
+    alex.say(answer)
+    alex.runAndWait()
 
-# NewsAPI
-news_api = "https://newsapi.org/v2/top-headlines"
+def listen():
+    try:
+        with sr.Microphone() as source:
+            print("Aurora listening...")
+            voice = listener.listen(source)
+            query = listener.recognize_google(voice)
+            return query
+    except:
+        return "Sound can't be captured . Please adjust your microphone"
 
-# Trivia API
-trivia_api = "https://opentdb.com/api.php"
+def chatWithAurora():
+    query = listen()
+    print('Me : ', query)
 
-# API keys
-weather_api_key = os.environ["WEATHER_API_KEY"]
-news_api_key = os.environ["NEWS_API_KEY"]
+    # Preprocess query
+    input_ids = tokenizer.encode(query, return_tensors='pt').to(device)
 
-# Chatbot
-@app.post("/chat")
-async def chat(request: Request):
-    user_input = request.json()["user_input"]
+    # Generate response
+    output = model.generate(input_ids, max_length=50)
 
-    # Weather API
-    if user_input == "weather":
-        params = {"q": "London", "appid": weather_api_key}
-        response = requests.get(weather_api, params=params).json()["weather"][0]["description"]
-    # News API
-    elif user_input == "news":
-        params = {"country": "us", "apiKey": news_api_key}
-        response = requests.get(news_api, params=params).json()["articles"][0]["title"]
-    # Trivia API
-    elif user_input == "trivia":
-        params = {"amount": 1, "type": "multiple"}
-        response = requests.get(trivia_api, params=params).json()["results"][0]["question"]
-    # Customized response using Gen AI
-    else:
-        response = ai_model(user_input, max_length=50)["generated_text"]
+    # Postprocess response
+    response = tokenizer.decode(output[0], skip_special_tokens=True)
 
-    return {"response": response}
+    speak(response)
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Handle specific intents like play,time, jokes ,etc
+    if 'play' in query:
+        song = query.replace('play ', '')
+        speak("Playing" + song)
+        pywhatkit.playonyt(song)
+    elif 'time' in query:
+        time = datetime.datetime.now().strftime('%I:%M %p')
+        speak("It's " + time + " now")
+    elif 'joke' in query:
+        speak(pyjokes.get_joke())
+    elif 'bye' in query:
+        speak("Okay bye! Have a nice day ahead!")
+        exit()
+
+while True:
+    chatWithAurora()
