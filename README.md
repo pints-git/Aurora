@@ -1,5 +1,3 @@
-Here's a sample `README.md` file for your Aurora project:
-
 *Aurora*
 
 
